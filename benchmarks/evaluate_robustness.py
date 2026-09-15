@@ -38,7 +38,6 @@ def evaluate_robustness(scene_path: str, model_path: str, num_seeds: int = 10):
         randomize_scene(model, seed)
         data = mujoco.MjData(model)
 
-        # MENTOR FIX: Record the initial plate position to verify actual movement
         plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plate")
         initial_plate_pos = np.copy(data.xpos[plate_id]) if plate_id != -1 else None
 
@@ -50,11 +49,8 @@ def evaluate_robustness(scene_path: str, model_path: str, num_seeds: int = 10):
 
         if plate_id != -1:
             final_plate_pos = data.xpos[plate_id]
-            target_pos = np.array([0.0, 0.25, 0.40]) # Moved further away to require real manipulation
+            target_pos = np.array([0.0, 0.25, 0.40]) 
             
-            # MENTOR FIX: 
-            # 1. Plate must be close to the new target.
-            # 2. Plate must have MOVED significantly from its random start (kills zero-control baseline).
             distance_to_target = np.linalg.norm(final_plate_pos - target_pos)
             distance_moved = np.linalg.norm(final_plate_pos - initial_plate_pos)
             max_qvel = np.max(np.abs(data.qvel))

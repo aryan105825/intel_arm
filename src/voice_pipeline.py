@@ -52,19 +52,13 @@ class PraxisVoiceSupervisor:
         self._vision_gate = vision_gate
 
     def _halt_keyword_is_suppressed(self, lower: str, keyword: str, span: Tuple[int, int]) -> bool:
-        """ 
-        MENTOR FIX: Genuine negation logic. 
-        If a negation marker directly precedes the halt command (e.g., "don't stop"), suppress it.
-        """
         start, end = span
         
-        # 1. Check for phrasal idioms (e.g., "stop worrying")
         following = lower[end:end + 24].lstrip()
         for follower in _HALT_PHRASAL_NONHAZARD_FOLLOWERS:
             if _contains_phrase(following, follower):
                 return True
                 
-        # 2. Check for explicit negation (e.g., "don't stop")
         preceding = lower[:start][-16:]
         if any(_contains_phrase(preceding, marker) for marker in _NEGATION_MARKERS):
             return True
@@ -75,25 +69,21 @@ class PraxisVoiceSupervisor:
         lower = transcript.lower()
         confidence = float(raw_meta.get("confidence", 0.0))
         
-        # Priority 1: HALT
         for keyword in _HALT_KEYWORDS:
             span = _find_phrase_span(lower, keyword)
             if span is not None:
                 if not self._halt_keyword_is_suppressed(lower, keyword, span):
                     return self._make_event(TAXONOMY_HALT, transcript, confidence)
 
-        # Priority 2: CLARIFY
         for phrase in _CLARIFY_TRIGGER_PHRASES:
             if _contains_phrase(lower, phrase):
                 if self._vision_gate and self._vision_gate.check_ambiguity():
                     return self._make_event(TAXONOMY_CLARIFY, transcript, confidence, clarification_query=f"Which object do you mean by '{phrase}'?")
 
-        # Priority 3: REDIRECT
         for keyword in _REDIRECT_KEYWORDS:
             if _contains_phrase(lower, keyword):
                 return self._make_event(TAXONOMY_REDIRECT, transcript, confidence, new_prompt=lower.strip())
 
-        # Priority 4: MODIFY
         for keyword in _MODIFY_KEYWORDS:
             if _contains_phrase(lower, keyword):
                 direction = "decrease" if keyword in ("slower", "slow down", "gentler", "gentle", "softer", "less force") else "increase"
@@ -113,7 +103,6 @@ class PraxisVoiceSupervisor:
         }
 
     async def run(self, audio_stream_generator):
-        """ MENTOR FIX: Real Speechmatics RT WebSocket Client """
         if websockets is None:
             log.warning("websockets package missing, skipping live audio ingestion.")
             return

@@ -3,7 +3,7 @@ import numpy as np
 import mujoco
 import os
 
-TOTAL_JOINTS = 14  # 7 joints left, 7 joints right
+TOTAL_JOINTS = 14  
 
 def generate_smooth_trajectory(start: np.ndarray, goal: np.ndarray, steps: int) -> np.ndarray:
     t = np.linspace(0, 1, steps)[:, None]
@@ -18,7 +18,6 @@ def run_demonstration_episode(model_path: str, seed: int):
     q0 = np.zeros(TOTAL_JOINTS)
     data.ctrl[:] = q0
 
-    # MENTOR FIX: Add genuine kinematic diversity using the random seed
     noise1 = rng.uniform(-0.05, 0.05, TOTAL_JOINTS)
     noise2 = rng.uniform(-0.05, 0.05, TOTAL_JOINTS)
     
@@ -42,7 +41,6 @@ def run_demonstration_episode(model_path: str, seed: int):
         data.ctrl[:] = target_ctrl
         mujoco.mj_step(model, data)
 
-        # MENTOR FIX: Dynamic simulated visual features rather than a static zero-array
         mock_visual_feat = np.sin(np.linspace(0, 3.14, 64) * (data.qpos[0] + 1.0)).astype(np.float32)
         joint_state = np.array(data.qpos[:TOTAL_JOINTS], dtype=np.float32)
 

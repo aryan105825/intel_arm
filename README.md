@@ -1,4 +1,4 @@
-# SafeVLA: Deterministic Edge Safety & Interruption Control Plane for Bimanual VLA Manipulation
+# Praxis Guard: Deterministic Edge Safety & Compliance Control Plane for VLA Systems
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenVINO](https://img.shields.io/badge/Intel-OpenVINO_2026.3-blue.svg)](https://docs.openvino.ai/)
@@ -7,12 +7,12 @@
 
 **Tracks:**
 
-* **Primary:** Intel Physical AI Online Challenge — Bimanual VLA Manipulation
+* **Primary:** Intel Physical AI Online Challenge
 * **Bonus Award:** Best Use of Speechmatics
 
 ---
 
-## Executive Summary
+## The Problem: The Action-Horizon Blind Spot
 
 Modern manipulation policies such as ACT, SmolVLA, and Pi0.5 predict motor trajectories in chunks:
 
@@ -22,162 +22,219 @@ $$
 
 typically with $k = 50$ steps.
 
-While action chunking stabilizes high-frequency multi-joint control, it introduces an **action-horizon blind spot**: the robot can continue executing a previously generated chunk even when a dynamic workspace hazard appears during execution.
+While action chunking stabilizes high-frequency multi-joint control, it introduces an **action-horizon blind spot**: once a trajectory chunk has been generated, the robot can continue executing it even when a dynamic workspace hazard appears during execution.
 
-**SafeVLA** decouples *trajectory generation* from *deterministic safety arbitration*.
+**Praxis Guard** addresses this gap.
 
-A lightweight OpenVINO-optimized bimanual Vision-Language-Action (VLA) baseline drives coordinated dual SO-101 manipulation in MuJoCo, while the **Praxis Guard** control plane intercepts spoken natural-language corrections through Speechmatics streaming ASR.
-
-Safety-critical commands can immediately invalidate the active action chunk and inject a zero-velocity hold. Every intervention is cryptographically signed and recorded through a SHA-256 hash-chained append-only compliance ledger.
+We do not compete on generating the largest foundation model. Instead, we build the **safety infrastructure required to supervise and interrupt VLA systems running on edge hardware**.
 
 ---
 
-## Honest Technical Scope & Capabilities
+## Technical Scope: Safety First
 
-Rather than deploying a massive foundation model, this submission focuses on a **highly optimized edge-safety architecture** built explicitly around Intel Core Ultra and Speechmatics integration.
+Praxis Guard decouples **trajectory generation** from **deterministic safety arbitration**.
 
-### Deterministic Voice-Interrupt Gate
+A lightweight OpenVINO-optimized proxy policy drives coordinated dual SO-101 manipulation in MuJoCo, while the Praxis Guard control plane supervises execution and intercepts spoken natural-language corrections through Speechmatics streaming ASR.
 
-A priority-ordered intervention taxonomy is implemented:
+### Core Capabilities
 
-```text
-HALT > CLARIFY > REDIRECT > MODIFY
-```
+* **Speechmatics Streaming Integration:** A WebSocket streaming client interfaces with the Speechmatics real-time ASR endpoint for low-latency speech recognition.
 
-The voice pipeline includes negation awareness:
+* **Deterministic Voice-Interrupt Gate:** A priority-ordered intervention taxonomy is implemented:
 
-```text
-"Don't stop now"                  → No HALT trigger
+  ```text
+  HALT > CLARIFY > REDIRECT > MODIFY
+  ```
 
-"Stop! The glass is slipping"    → HALT
-```
+  with negation awareness:
 
-Spoken safety hazards bypass normal policy inference and directly trigger the safety arbitration path, flushing the currently active action chunk and commanding a zero-velocity hold.
+  ```text
+  "Don't stop now"                → No HALT trigger
 
-### Cryptographic Compliance Ledger
+  "Stop! The glass is slipping"  → HALT
+  ```
 
-Every safety intervention is signed and hash-chained:
+* **Instant Action Flush:** Safety-critical spoken hazards bypass normal policy inference, invalidate the active action chunk, and inject a zero-velocity hold.
 
-$$
-H_i = \operatorname{SHA256}(H_{i-1} \parallel S_i)
-$$
+* **Cryptographic Compliance Ledger:** Safety interventions are signed and hash-chained:
 
-where each event incorporates the cryptographic state of the previous event.
+  $$
+  H_i = \operatorname{SHA256}(H_{i-1} \parallel S_i)
+  $$
 
-The resulting append-only ledger provides a tamper-evident record of safety interventions for post-run auditing and reproducibility.
+  creating an append-only, tamper-evident event history for auditing and reproducibility.
 
-### OpenVINO Edge Optimization
+* **Baseline Verification Policy:** The safety plane is evaluated using a lightweight, **10-seed domain-randomized behavioral-cloning policy** compiled to OpenVINO Intermediate Representation (IR).
 
-The behavioral-cloning policy is converted and compiled to **OpenVINO Intermediate Representation (IR)** using FP16 precision.
-
-The resulting `.xml` / `.bin` model representation is designed for deployment across supported OpenVINO execution devices, including Intel Core Ultra CPU, GPU/iGPU, and NPU targets where supported.
-
-### Baseline VLA Simulation
-
-To isolate and evaluate the safety plane, the system uses a lightweight **50-seed domain-randomized behavioral-cloning policy**.
-
-> **Scope note:** Vision and language inputs are represented by embedded heuristic proxies in this build. The primary objective is therefore deterministic safety arbitration, interruption control, edge inference, and reproducible manipulation evaluation rather than foundation-model-scale semantic generalization.
+  > **Scope note:** Vision and language inputs are represented as embedded heuristic proxies in this build. This intentionally isolates the evaluation of inference latency, safety arbitration, action interruption, and manipulation robustness rather than foundation-model-scale semantic generalization.
 
 ---
 
 ## System Architecture
 
 ```text
-                         [ Synthesized Goal Vector ]
-                                    │
-                                    ▼
-        [ Simulated State Feed ] ──►┌──────────────────────────────────────┐
-                                    │        OpenVINO VLA Baseline         │
-        [ 14-DOF Joint Telemetry ]─►│   Multi-Modal Behavioral Cloning    │
-                                    └─────────────────┬────────────────────┘
-                                                      │
-                                                      │ Predicted Action Chunk
-                                                      │ k = 50
-                                                      ▼
- [ Speechmatics Streaming ASR ] ──►┌──────────────────────────────────────┐
-     "Stop! Glass is slipping!"    │         Praxis Guard Arbiter         │
-                                   │    Deterministic Safety Interceptor  │
-                                   └─────────────────┬────────────────────┘
-                                                     │
-                                                     │ Safe Motor Commands
-                                                     │ 100 Hz
-                                                     ▼
-                                    ┌──────────────────────────────────────┐
-                                    │        Dual SO-101 MuJoCo Sim        │
-                                    │                                      │
-                                    │ Plate · Mug · Fork · Shared Table   │
-                                    └──────────────────────────────────────┘
+                         ┌─────────────────────────┐
+                         │   Goal / Task Context   │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │   OpenVINO Proxy VLA    │
+                         │   Behavioral Cloning    │
+                         └────────────┬────────────┘
+                                      │
+                                      │ Action Chunk
+                                      │ k = 50
+                                      ▼
+              ┌──────────────────────────────────────────────┐
+              │               PRAXIS GUARD                   │
+              │                                              │
+              │       Deterministic Safety Arbiter           │
+              │                                              │
+              │  HALT > CLARIFY > REDIRECT > MODIFY          │
+              └──────────────┬───────────────────┬───────────┘
+                             │                   │
+                   Safe Action│                   │Voice Interrupt
+                             │                   │
+                             ▼                   ▼
+                   ┌─────────────────┐    ┌──────────────────┐
+                   │  Motor Command  │    │ Speechmatics ASR │
+                   │     Path        │    │  Streaming Input │
+                   └────────┬────────┘    └────────┬─────────┘
+                            │                      │
+                            │                      │ Intent
+                            │                      ▼
+                            │             ┌──────────────────┐
+                            │             │ Intent Classifier│
+                            │             └────────┬─────────┘
+                            │                      │
+                            └──────────┬───────────┘
+                                       ▼
+                         ┌─────────────────────────┐
+                         │   Dual SO-101 MuJoCo   │
+                         │     Manipulation Sim    │
+                         │                         │
+                         │ Plate · Mug · Fork     │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │  Cryptographic Audit    │
+                         │        Ledger            │
+                         └─────────────────────────┘
 ```
 
 ---
 
 ## Safety Control Flow
 
-The central control path is:
+Praxis Guard operates as an independent supervisory layer between trajectory generation and actuation.
 
 ```text
-                    ┌──────────────────┐
-                    │   OpenVINO VLA   │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │  Action Chunk    │
-                    │    k = 50        │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                 ┌────────────────────────┐
-                 │     Praxis Guard       │
-                 │ Deterministic Arbiter  │
-                 └───────────┬────────────┘
-                             │
-              ┌──────────────┼───────────────┐
-              │              │               │
-              ▼              ▼               ▼
-           SAFE           MODIFY          REDIRECT
-              │              │               │
-              │              └──────┬────────┘
-              │                     │
-              ▼                     ▼
-         Execute action        Updated action
-                                   
-                             ┌───────────────┐
-                             │   CLARIFY     │
-                             └───────┬───────┘
+                    VLA generates action chunk
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │  Praxis Guard   │
+                     │     Arbiter     │
+                     └────────┬────────┘
+                              │
+                ┌─────────────┼──────────────┐
+                │             │              │
+                ▼             ▼              ▼
+              SAFE          MODIFY         REDIRECT
+                │             │              │
+                │             └──────┬───────┘
+                │                    │
+                ▼                    ▼
+          Execute action       Updated action
+                                          
+                              ┌──────────────┐
+                              │   CLARIFY    │
+                              └──────┬───────┘
                                      │
                                      ▼
                               Pause / Context
 
-                             ┌───────────────┐
-                             │     HALT      │
-                             └───────┬───────┘
+                              ┌──────────────┐
+                              │     HALT     │
+                              └──────┬───────┘
                                      │
                                      ▼
-                             Flush action chunk
+                              Flush action chunk
                                      │
                                      ▼
-                           Zero-velocity hold
+                             Zero-velocity hold
                                      │
                                      ▼
-                              Audit Ledger
+                               Audit event
 ```
 
-The key architectural property is that **Praxis Guard is an independent deterministic supervisory layer**, rather than another generative model.
+The critical property is that **HALT does not require another VLA inference**.
+
+The currently executing trajectory is invalidated at the supervisory layer, allowing the safety mechanism to operate independently of the policy's action-generation cadence.
+
+---
+
+## The Action-Horizon Problem
+
+At a 100 Hz control frequency:
+
+$$
+T_{\text{step}} = \frac{1}{100} = 10\text{ ms}
+$$
+
+For an action chunk containing 50 steps:
+
+$$
+T_{\text{chunk}} = 50 \times 10\text{ ms} = 500\text{ ms}
+$$
+
+This creates a potential **500 ms action horizon**.
+
+```text
+Without Praxis Guard
+
+Policy ──► [ Action Chunk: 50 steps ] ───────────────────►
+                         500 ms
+                             
+                         Hazard!
+                            │
+                            X
+                     Policy may still
+                     be executing chunk
+
+
+With Praxis Guard
+
+Policy ──► [ Action Chunk: 50 steps ] ───────────────────►
+                         │
+                         │ Hazard detected
+                         ▼
+                    Praxis Guard
+                         │
+                         ▼
+                   FLUSH CHUNK
+                         │
+                         ▼
+                ZERO-VELOCITY HOLD
+```
+
+The safety layer therefore addresses a structural property of chunked action execution rather than attempting to improve the underlying policy's semantic intelligence.
 
 ---
 
 ## Empirical Benchmark & Hardware Profile
 
-### Hardware Context & Portability Note
+### Hardware Portability Note
 
-Benchmarks were captured directly using the test harness:
+Benchmarks were captured directly using:
 
 ```text
 benchmarks/intel_benchmark.py
 ```
 
-Empirical execution was recorded on an **x86 host environment** using the OpenVINO 2026.3 execution runtime.
+Empirical execution was recorded on an **x86 host environment** using the OpenVINO 2026.3 runtime.
 
 The policy is compiled into OpenVINO Intermediate Representation:
 
@@ -185,71 +242,44 @@ The policy is compiled into OpenVINO Intermediate Representation:
 .xml + .bin
 ```
 
-This representation is intended for portable deployment across supported OpenVINO devices. The same model artifact can be targeted toward supported Intel Core Ultra CPU, GPU/iGPU, or NPU execution backends.
+This model representation is designed for deployment across supported OpenVINO execution devices, including Intel Core Ultra CPU, GPU/iGPU, and NPU targets.
 
-> **Important:** The host measurements below are OpenVINO runtime measurements and should not be interpreted as measurements performed on Intel Core Ultra hardware. Intel-specific NPU latency should be validated directly on the target Core Ultra system.
+> **Important:** The measurements below are host-runtime measurements. They are **not measurements taken directly on Intel Core Ultra hardware**. Intel NPU latency should be validated on the target Core Ultra system.
 
 ### OpenVINO Inference & Compute Headroom
 
-| Metric                                 | Measured Result — OpenVINO IR Runtime | Intel Core Ultra Deployment Target |
-| -------------------------------------- | ------------------------------------: | ---------------------------------- |
-| **VLA Policy Inference Latency (p50)** |                          **0.058 ms** | < 3.0 ms NPU target                |
-| **VLA Policy Inference Latency (p99)** |                          **0.128 ms** | < 6.0 ms target                    |
-| **Throughput**                         |           **17,252.4 inferences/sec** | High-efficiency edge serving       |
-| **Action Chunk**                       |                          **50 steps** | 50 steps                           |
-| **Control Frequency**                  |                            **100 Hz** | 100 Hz                             |
-| **Action Horizon**                     |                            **500 ms** | 500 ms                             |
-| **Compute Headroom**                   |                         **499.94 ms** | > 490 ms target                    |
-| **Interrupt Response**                 |         **Instantaneous chunk flush** | < 1 ms deterministic HALT target   |
-
-### Action-Horizon Calculation
-
-The control loop operates at 100 Hz:
-
-$$
-T_{\text{step}} = \frac{1}{100} = 10\text{ ms}
-$$
-
-For a 50-step action chunk:
-
-$$
-T_{\text{chunk}} = 50 \times 10\text{ ms} = 500\text{ ms}
-$$
-
-Therefore, the policy can generate an action horizon spanning approximately **500 ms**.
-
-Praxis Guard operates outside this trajectory-generation horizon. A safety intervention can invalidate the active chunk rather than waiting for the next policy inference.
+| Metric                              | Measured Baseline Proxy Result | Intel Core Ultra Deployment Target |
+| ----------------------------------- | -----------------------------: | ---------------------------------- |
+| **Baseline Policy Inference (p50)** |                   **0.058 ms** | < 3.0 ms target                    |
+| **Baseline Policy Inference (p99)** |                   **0.128 ms** | < 6.0 ms target                    |
+| **Throughput**                      |    **17,252.4 inferences/sec** | High-efficiency edge serving       |
+| **Control Loop Margin**             |                  **499.94 ms** | > 490 ms target                    |
+| **Interrupt Response**              |      **Immediate chunk flush** | < 1.0 ms deterministic HALT target |
 
 ---
 
 ## 10-Seed Domain Perturbation & Robustness
 
-The manipulation system was evaluated across **10 randomized seeds** using:
+The manipulation system is evaluated over 10 randomized seeds using:
 
-* Object mass perturbation: $\pm25%$
-* Surface friction perturbation: $\pm20%$
+* Dynamic object mass: $\pm25%$
+* Surface friction: $\pm20%$
 * Initial coordinate / object-placement perturbation
-* Active manipulation rather than a stationary-control baseline
 
-The pass criteria require the robot to **actively move the plate beyond its starting-coordinate tolerance and reach the target destination**.
+The evaluation is not based on a stationary or zero-control baseline.
 
-|        Seed | Mass | Friction | Placement  | Active Manipulation | Result     |
-| ----------: | ---: | -------: | ---------- | ------------------- | ---------- |
-|      **00** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **01** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **02** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **03** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **04** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **05** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **06** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **07** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **08** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-|      **09** | ±25% |     ±20% | Randomized | Passed              | **PASSED** |
-| **Overall** |    — |        — | —          | **10 / 10**         | **100.0%** |
+**Pass criteria require the robot to actively move the plate beyond its starting-coordinate tolerance and successfully reach the target destination.**
 
 ### Result
 
 **Overall Task Success Rate: 100.0% — 10 / 10 seeds passed**
+
+| Metric               |     Result |
+| -------------------- | ---------: |
+| Evaluation Seeds     |     **10** |
+| Successful Seeds     |     **10** |
+| Failed Seeds         |      **0** |
+| Overall Task Success | **100.0%** |
 
 ---
 
@@ -257,11 +287,9 @@ The pass criteria require the robot to **actively move the plate beyond its star
 
 ### 1. Setup Environment
 
-Clone the repository and install the Python dependencies:
-
 ```bash
-git clone https://github.com/<your-org>/safe-vla.git
-cd safe-vla
+git clone https://github.com/<your-org>/praxis-guard.git
+cd praxis-guard
 
 python3 -m venv venv
 source venv/bin/activate
@@ -271,7 +299,7 @@ pip install -r requirements.txt
 
 ### 2. Run the End-to-End System
 
-Execute the full bimanual orchestration loop with the active safety supervisor:
+Execute the complete bimanual orchestration loop with the active safety supervisor:
 
 ```bash
 python src/main.py \
@@ -301,9 +329,9 @@ python benchmarks/evaluate_robustness.py \
   --model-path models/openvino_ir/vla_policy_fp16.xml
 ```
 
-### 4. Run the OpenVINO Latency Benchmark
+### 4. Run the OpenVINO Benchmark
 
-Run the inference latency and throughput benchmark:
+Run the latency and throughput benchmark:
 
 ```bash
 python benchmarks/intel_benchmark.py \
@@ -316,7 +344,7 @@ python benchmarks/intel_benchmark.py \
 ## Repository Structure
 
 ```text
-safe-vla/
+praxis-guard/
 ├── config/
 │   └── dinner_scene.xml
 │       # Dual SO-101 MuJoCo manipulation scene
@@ -332,10 +360,10 @@ safe-vla/
 │   │   # End-to-end VLA + Praxis Guard + MuJoCo runtime
 │   │
 │   ├── arbiter_engine.py
-│   │   # Deterministic safety arbitration and interrupt state machine
+│   │   # Deterministic safety arbitration and action interruption
 │   │
 │   ├── audit_logger.py
-│   │   # SHA-256 hash-chained append-only audit ledger
+│   │   # SHA-256 hash-chained compliance ledger
 │   │
 │   ├── expert_demonstrator.py
 │   │   # Demonstration / trajectory generation
@@ -344,7 +372,7 @@ safe-vla/
 │   │   # Behavioral cloning training
 │   │
 │   ├── vla_model.py
-│   │   # Lightweight multimodal policy
+│   │   # Lightweight proxy policy
 │   │
 │   ├── voice_pipeline.py
 │   │   # Speechmatics streaming ASR + intent classification
@@ -354,7 +382,7 @@ safe-vla/
 │
 ├── benchmarks/
 │   ├── evaluate_robustness.py
-│   │   # Domain-randomized manipulation evaluation
+│   │   # 10-seed domain-randomized evaluation
 │   │
 │   └── intel_benchmark.py
 │       # OpenVINO latency and throughput benchmark
@@ -367,58 +395,65 @@ safe-vla/
 
 ## Technology Stack
 
-| Layer                  | Technology                           |
-| ---------------------- | ------------------------------------ |
-| **Simulation**         | MuJoCo                               |
-| **Robot**              | Dual SO-101                          |
-| **Policy**             | Lightweight VLA / Behavioral Cloning |
-| **Inference Runtime**  | OpenVINO 2026.3                      |
-| **Model Precision**    | FP16                                 |
-| **Speech Recognition** | Speechmatics Streaming ASR           |
-| **Safety Arbitration** | Praxis Guard                         |
-| **Control Frequency**  | 100 Hz                               |
-| **Audit Mechanism**    | SHA-256 Hash Chaining                |
-| **Runtime**            | Python                               |
+| Component              | Technology                                 |
+| ---------------------- | ------------------------------------------ |
+| **Simulation**         | MuJoCo                                     |
+| **Robot**              | Dual SO-101                                |
+| **Policy**             | Lightweight Behavioral Cloning / VLA Proxy |
+| **Inference Runtime**  | OpenVINO 2026.3                            |
+| **Model Precision**    | FP16                                       |
+| **Speech Recognition** | Speechmatics Streaming ASR                 |
+| **Safety Arbitration** | Praxis Guard                               |
+| **Control Frequency**  | 100 Hz                                     |
+| **Action Chunk**       | 50 steps                                   |
+| **Audit Mechanism**    | SHA-256 Hash Chaining                      |
+| **Runtime**            | Python                                     |
 
 ---
 
-## Core Design Principle
+## Design Principle
 
-SafeVLA separates two fundamentally different responsibilities:
+Praxis Guard deliberately separates **intelligence** from **authority**.
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│                    TRAJECTORY LAYER                     │
-│                                                         │
-│  VLA Policy                                              │
-│  "What should the robot do?"                            │
-│                                                         │
-│  Generates action chunks                                │
-└───────────────────────────┬─────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    SAFETY LAYER                         │
-│                                                         │
-│  Praxis Guard                                            │
-│  "Is it safe to continue executing?"                    │
-│                                                         │
-│  Deterministic arbitration                              │
-│  Voice interruption                                     │
-│  Chunk invalidation                                      │
-│  Zero-velocity hold                                      │
-│  Cryptographic audit                                     │
-└───────────────────────────┬─────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    ACTUATION LAYER                      │
-│                                                         │
-│  Dual SO-101 MuJoCo Environment                          │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│                  TRAJECTORY GENERATION                │
+│                                                       │
+│  VLA / Policy                                         │
+│                                                       │
+│  "What should the robot do?"                          │
+│                                                       │
+│  Generates action chunks                              │
+└──────────────────────────┬────────────────────────────┘
+                           │
+                           ▼
+┌───────────────────────────────────────────────────────┐
+│                    SAFETY AUTHORITY                    │
+│                                                       │
+│  Praxis Guard                                         │
+│                                                       │
+│  "Is it safe to continue?"                            │
+│                                                       │
+│  • Deterministic arbitration                          │
+│  • Voice interruption                                 │
+│  • Action-chunk invalidation                           │
+│  • Zero-velocity hold                                 │
+│  • Cryptographic audit                                │
+└──────────────────────────┬────────────────────────────┘
+                           │
+                           ▼
+┌───────────────────────────────────────────────────────┐
+│                      ACTUATION                         │
+│                                                       │
+│  Dual SO-101 MuJoCo Environment                       │
+└───────────────────────────────────────────────────────┘
 ```
 
-This separation allows a lightweight generative manipulation policy to operate normally while retaining an independent, deterministic mechanism capable of overriding its execution when a safety-critical intervention occurs.
+The VLA decides **what to do**.
+
+Praxis Guard retains authority over **whether execution should continue**.
+
+That separation is the core design of the system.
 
 ---
 
@@ -426,4 +461,4 @@ This separation allows a lightweight generative manipulation policy to operate n
 
 This project is released under the **MIT License**.
 
-See [`LICENSE`](LICENSE) for the complete license text.
+See [`LICENSE`](LICENSE) for details.
