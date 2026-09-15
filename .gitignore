@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments & Virtual Envs
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Environment Variables & Secrets
+.env
+.env.local
+*.env
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Training Data & Raw Dataset Cache
+data/*.npz
+data/*.parquet
+data/cache/
+
+# PyTorch Checkpoints & Intermediate Weights
+# (Keep models/openvino_ir committed so judges/evaluators can run inference immediately)
+models/*.pt
+models/*.pth
+models/*.safetensors
+models/*.bin_backup
+
+# Testing & Benchmark Artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+benchmarks/raw/*.csv
+benchmarks/raw/*.jsonl
+!benchmarks/raw/.gitkeep
+
+# Build / Distribution
+build/
+dist/
+*.egg-info/

@@ -1,0 +1,120 @@
+<mujoco model="dual_so101_dinner_setting">
+  <option timestep="0.01" gravity="0 0 -9.81" integrator="implicitfast"/>
+  
+  <default>
+    <joint damping="2.5" armature="0.05"/>
+    <geom friction="1.2 0.005 0.0001" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </default>
+
+  <visual>
+    <headlight ambient="0.4 0.4 0.4" diffuse="0.8 0.8 0.8"/>
+  </visual>
+
+  <worldbody>
+    <light diffuse=".8 .8 .8" pos="0 0 3" dir="0 0 -1"/>
+    <geom name="floor" type="plane" size="2 2 0.1" rgba=".95 .95 .95 1"/>
+    
+    <!-- Table -->
+    <geom name="table" type="box" size="0.65 0.45 0.03" pos="0 0 0.35" rgba=".58 .45 .32 1"/>
+
+    <!-- ================= LEFT ARM ================= -->
+    <body name="left_base" pos="-0.45 0 0.38" euler="0 0 0">
+      <geom type="cylinder" size="0.04 0.02" rgba=".3 .3 .3 1"/>
+      <body name="left_link1" pos="0 0 0.04">
+        <joint name="left_joint1" type="hinge" axis="0 0 1" range="-3.14 3.14"/>
+        <geom type="capsule" fromto="0 0 0 0 0 0.1" size="0.025" rgba=".2 .5 .8 1"/>
+        <body name="left_link2" pos="0 0 0.1">
+          <joint name="left_joint2" type="hinge" axis="0 1 0" range="-1.8 1.8"/>
+          <geom type="capsule" fromto="0 0 0 0.15 0 0" size="0.025" rgba=".2 .5 .8 1"/>
+          <body name="left_link3" pos="0.15 0 0">
+            <joint name="left_joint3" type="hinge" axis="0 1 0" range="-2.0 2.0"/>
+            <geom type="capsule" fromto="0 0 0 0.12 0 0" size="0.02" rgba=".2 .5 .8 1"/>
+            <body name="left_link4" pos="0.12 0 0">
+              <joint name="left_joint4" type="hinge" axis="1 0 0" range="-3.14 3.14"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.02" rgba=".2 .6 .7 1"/>
+              <body name="left_link5" pos="0.08 0 0">
+                <joint name="left_joint5" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+                <geom type="capsule" fromto="0 0 0 0.06 0 0" size="0.018" rgba=".2 .6 .7 1"/>
+                <body name="left_gripper_base" pos="0.06 0 0">
+                  <joint name="left_joint6" type="hinge" axis="1 0 0" range="-3.14 3.14"/>
+                  <geom type="box" size="0.015 0.03 0.015" rgba=".1 .1 .1 1"/>
+                  <body name="left_finger" pos="0.03 0.02 0">
+                    <joint name="left_gripper" type="slide" axis="0 1 0" range="-0.02 0.02"/>
+                    <geom name="left_pad" type="box" size="0.02 0.005 0.01" rgba=".9 .2 .2 1"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ================= RIGHT ARM ================= -->
+    <body name="right_base" pos="0.45 0 0.38" euler="0 0 3.1415">
+      <geom type="cylinder" size="0.04 0.02" rgba=".3 .3 .3 1"/>
+      <body name="right_link1" pos="0 0 0.04">
+        <joint name="right_joint1" type="hinge" axis="0 0 1" range="-3.14 3.14"/>
+        <geom type="capsule" fromto="0 0 0 0 0 0.1" size="0.025" rgba=".8 .5 .2 1"/>
+        <body name="right_link2" pos="0 0 0.1">
+          <joint name="right_joint2" type="hinge" axis="0 1 0" range="-1.8 1.8"/>
+          <geom type="capsule" fromto="0 0 0 0.15 0 0" size="0.025" rgba=".8 .5 .2 1"/>
+          <body name="right_link3" pos="0.15 0 0">
+            <joint name="right_joint3" type="hinge" axis="0 1 0" range="-2.0 2.0"/>
+            <geom type="capsule" fromto="0 0 0 0.12 0 0" size="0.02" rgba=".8 .5 .2 1"/>
+            <body name="right_link4" pos="0.12 0 0">
+              <joint name="right_joint4" type="hinge" axis="1 0 0" range="-3.14 3.14"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.02" rgba=".8 .6 .2 1"/>
+              <body name="right_link5" pos="0.08 0 0">
+                <joint name="right_joint5" type="hinge" axis="0 1 0" range="-1.57 1.57"/>
+                <geom type="capsule" fromto="0 0 0 0.06 0 0" size="0.018" rgba=".8 .6 .2 1"/>
+                <body name="right_gripper_base" pos="0.06 0 0">
+                  <joint name="right_joint6" type="hinge" axis="1 0 0" range="-3.14 3.14"/>
+                  <geom type="box" size="0.015 0.03 0.015" rgba=".1 .1 .1 1"/>
+                  <body name="right_finger" pos="0.03 0.02 0">
+                    <joint name="right_gripper" type="slide" axis="0 1 0" range="-0.02 0.02"/>
+                    <geom name="right_pad" type="box" size="0.02 0.005 0.01" rgba=".2 .2 .9 1"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ================= DINNER OBJECTS ================= -->
+    <body name="plate" pos="0 0.12 0.40">
+      <freejoint name="plate_joint"/>
+      <geom name="plate_geom" type="cylinder" size="0.09 0.01" rgba="0.95 0.95 0.95 1" mass="0.25"/>
+    </body>
+
+    <body name="mug" pos="0.18 -0.08 0.42">
+      <freejoint name="mug_joint"/>
+      <geom name="mug_geom" type="cylinder" size="0.035 0.045" rgba="0.2 0.7 0.9 1" mass="0.18"/>
+    </body>
+
+    <body name="fork" pos="-0.18 -0.08 0.39">
+      <freejoint name="fork_joint"/>
+      <geom name="fork_geom" type="box" size="0.01 0.06 0.005" rgba="0.75 0.75 0.75 1" mass="0.05"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position joint="left_joint1" kp="40" kv="5"/>
+    <position joint="left_joint2" kp="40" kv="5"/>
+    <position joint="left_joint3" kp="40" kv="5"/>
+    <position joint="left_joint4" kp="30" kv="3"/>
+    <position joint="left_joint5" kp="30" kv="3"/>
+    <position joint="left_joint6" kp="20" kv="2"/>
+    <position joint="left_gripper" kp="50" kv="5"/>
+
+    <position joint="right_joint1" kp="40" kv="5"/>
+    <position joint="right_joint2" kp="40" kv="5"/>
+    <position joint="right_joint3" kp="40" kv="5"/>
+    <position joint="right_joint4" kp="30" kv="3"/>
+    <position joint="right_joint5" kp="30" kv="3"/>
+    <position joint="right_joint6" kp="20" kv="2"/>
+    <position joint="right_gripper" kp="50" kv="5"/>
+  </actuator>
+</mujoco>
