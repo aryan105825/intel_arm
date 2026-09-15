@@ -38,23 +38,28 @@ def evaluate_robustness(scene_path: str, model_path: str, num_seeds: int = 10):
         randomize_scene(model, seed)
         data = mujoco.MjData(model)
 
+        # MENTOR FIX: Record the initial plate position to verify actual movement
+        plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plate")
+        initial_plate_pos = np.copy(data.xpos[plate_id]) if plate_id != -1 else None
+
         for step in range(160):
             obs = np.concatenate([data.qpos[:14], np.zeros(64, dtype=np.float32)])
             action_chunk = vla.predict_chunk(obs, lang_goal)
             data.ctrl[:14] = action_chunk[step % 50]
             mujoco.mj_step(model, data)
 
-        # MENTOR FIX: True Task Success Metric
-        # Check if the plate body actually reached the target table setting coordinate
-        plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plate")
         if plate_id != -1:
-            plate_pos = data.xpos[plate_id]
-            target_pos = np.array([0.0, 0.15, 0.40]) # Example desired table placement
-            distance = np.linalg.norm(plate_pos - target_pos)
+            final_plate_pos = data.xpos[plate_id]
+            target_pos = np.array([0.0, 0.25, 0.40]) # Moved further away to require real manipulation
+            
+            # MENTOR FIX: 
+            # 1. Plate must be close to the new target.
+            # 2. Plate must have MOVED significantly from its random start (kills zero-control baseline).
+            distance_to_target = np.linalg.norm(final_plate_pos - target_pos)
+            distance_moved = np.linalg.norm(final_plate_pos - initial_plate_pos)
             max_qvel = np.max(np.abs(data.qvel))
             
-            # Success: Plate is within 10cm of target AND physics remained stable
-            success = bool(distance < 0.10 and max_qvel < 15.0)
+            success = bool(distance_to_target < 0.15 and distance_moved > 0.05 and max_qvel < 15.0)
         else:
             success = False
 
