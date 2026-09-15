@@ -9,8 +9,12 @@ def chain_hash(prev, sig):
     return "sha256:" + hashlib.sha256(f"{prev}{sig}".encode()).hexdigest()
 
 def main():
-    with open(PATH) as f:
-        records = [json.loads(line) for line in f if line.strip()]
+    try:
+        with open(PATH) as f:
+            records = [json.loads(line) for line in f if line.strip()]
+    except FileNotFoundError:
+        print(f"Ledger not found at {PATH}")
+        return
 
     prev = "sha256:" + ("0" * 64)
     for i, rec in enumerate(records):
@@ -18,7 +22,9 @@ def main():
         expected = chain_hash(prev, sig)
         ok = (expected == rec["chain_hash"]) and (sig == rec["signature"])
         status = "OK " if ok else "TAMPERED"
-        print(f"[{i:03d}] {status}  event={rec['event'].get('taxonomy')}  chain_hash={rec['chain_hash'][:20]}...")
+        
+        event_name = rec['event'].get('taxonomy', rec['event'].get('event', 'UNKNOWN'))
+        print(f"[{i:03d}] {status}  event={event_name}  chain_hash={rec['chain_hash'][:20]}...")
         if not ok:
             print(f"       ^^^ chain breaks here. Everything after this point is now provably invalid.")
         prev = rec["chain_hash"]

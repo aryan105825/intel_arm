@@ -9,6 +9,7 @@ import mujoco
 import imageio
 from PIL import Image, ImageDraw, ImageFont
 
+from src.main import OpenVINOVLAController
 from src.arbiter_engine import PraxisGuardArbiter
 
 SCENE = "config/dinner_scene.xml"
@@ -40,10 +41,6 @@ def hud_overlay(frame_rgb, step, arbiter_state, chain_hash):
     return np.array(img)
 
 def main():
-    ledger_path = Path("benchmarks/raw/compliance_ledger.jsonl")
-    if ledger_path.exists():
-        ledger_path.unlink()
-
     model = mujoco.MjModel.from_xml_path(SCENE)
     data = mujoco.MjData(model)
     renderer = mujoco.Renderer(model, height=HEIGHT, width=WIDTH)
@@ -54,28 +51,27 @@ def main():
     camera.distance = 1.3
     camera.lookat = np.array([0.0, 0.05, 0.35])
 
+    vla = OpenVINOVLAController(MODEL_PATH, device="CPU")
     arbiter = PraxisGuardArbiter(openvino_model_path=MODEL_PATH, device="CPU")
-    writer = imageio.get_writer(OUT_PATH, fps=FPS, quality=8)
+    lang_goal = np.ones(32, dtype=np.float32) * 0.5
     
+    writer = imageio.get_writer(OUT_PATH, fps=FPS, quality=8)
     state_label = "ACTIVE"
 
     for step in range(TOTAL_STEPS):
-        # DIRECT KINEMATIC OVERRIDE - Guarantees visual movement for the demo
-        if not arbiter.emergency_stop_flag:
-            progress = step / HALT_AT_STEP
-            ctrl = np.zeros(14)
-            # Sweep both arms inward and downward toward the objects
-            ctrl[0] = 0.5 * np.sin(progress * np.pi / 2)
-            ctrl[1] = 0.8 * np.sin(progress * np.pi / 2)
-            ctrl[2] = -0.9 * np.sin(progress * np.pi / 2)
-            
-            ctrl[7] = -0.5 * np.sin(progress * np.pi / 2)
-            ctrl[8] = 0.8 * np.sin(progress * np.pi / 2)
-            ctrl[9] = -0.9 * np.sin(progress * np.pi / 2)
-            
-            data.ctrl[:14] = ctrl
+        # Use the exact synthetic visual feature the model was trained on
+        visual_embedding = np.sin(np.linspace(0, 3.14, 64) * (data.qpos[0] + 1.0)).astype(np.float32)
 
-        # TRIGGER HALT INTERRUPT
+        if arbiter.remaining_chunk_horizon is None or arbiter.remaining_chunk_horizon == 0:
+            joint_state = np.array(data.qpos[:14], dtype=np.float32)
+            obs = np.concatenate([joint_state, visual_embedding])
+            action_chunk = vla.predict_chunk(obs, lang_goal)
+            arbiter.load_action_chunk([action_chunk[i] for i in range(len(action_chunk))])
+
+        cmd = arbiter.step_control_loop(vision_frame=None, state_vector=data.qpos[:14])
+        data.ctrl[:14] = cmd[:14]
+        mujoco.mj_step(model, data)
+
         if step == HALT_AT_STEP:
             arbiter.dispatch_voice_interrupt({
                 "taxonomy": "HALT",
@@ -84,9 +80,6 @@ def main():
                 "parameters": None, "new_prompt": None, "clarification_query": None
             })
             state_label = "HALT"
-            # Once emergency_stop_flag flips to True, data.ctrl stops updating and holds its last position
-
-        mujoco.mj_step(model, data)
 
         chain_hash = arbiter._ledger._last_chain_hash
         renderer.update_scene(data, camera=camera)
@@ -94,7 +87,6 @@ def main():
         writer.append_data(hud_overlay(big_frame, step, state_label, chain_hash))
 
     writer.close()
-    print(f"Saved {OUT_PATH} — {TOTAL_STEPS} frames at {FPS}fps")
 
 if __name__ == "__main__":
     main()
