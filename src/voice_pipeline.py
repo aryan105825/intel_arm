@@ -4,12 +4,14 @@ import functools
 import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from src.vision_pipeline import PraxisVisionGate
+import logging
 
 try:
     import websockets
 except ImportError:
     websockets = None
+
+log = logging.getLogger(__name__)
 
 SPEECHMATICS_RT_URL = "wss://eu2.rt.speechmatics.com/v2"
 TAXONOMY_HALT = "HALT"
@@ -23,7 +25,6 @@ _REDIRECT_KEYWORDS = ["clear", "instead", "go to", "move to", "over there", "put
 _MODIFY_KEYWORDS = ["slower", "slow down", "faster", "speed up", "gentler", "gentle", "softer", "harder", "more force", "less force"]
 _CLARIFY_TRIGGER_PHRASES = ["that one", "this one", "the other one", "grab it", "pick that up", "put it there", "get that"]
 _NEGATION_MARKERS = ["don't", "do not", "dont", "not", "never mind", "no need to"]
-_NON_HAZARD_VERBS = ["worry", "mind", "mean", "wait for", "rush"]
 _HALT_PHRASAL_NONHAZARD_FOLLOWERS = ["worrying", "worry", "rushing", "rushing me", "panicking", "freaking out"]
 
 _TOKEN_RE = re.compile(r"[a-z']+")
@@ -45,10 +46,30 @@ def _find_phrase_span(lower_transcript: str, phrase: str) -> Optional[Tuple[int,
     return (match.start(), match.end())
 
 class PraxisVoiceSupervisor:
-    def __init__(self, api_key: str, interrupt_callback: Callable[[Dict[str, Any]], None], vision_gate: PraxisVisionGate):
+    def __init__(self, api_key: str, interrupt_callback: Callable[[Dict[str, Any]], None], vision_gate):
         self._api_key = api_key
         self._interrupt_callback = interrupt_callback
         self._vision_gate = vision_gate
+
+    def _halt_keyword_is_suppressed(self, lower: str, keyword: str, span: Tuple[int, int]) -> bool:
+        """ 
+        MENTOR FIX: Genuine negation logic. 
+        If a negation marker directly precedes the halt command (e.g., "don't stop"), suppress it.
+        """
+        start, end = span
+        
+        # 1. Check for phrasal idioms (e.g., "stop worrying")
+        following = lower[end:end + 24].lstrip()
+        for follower in _HALT_PHRASAL_NONHAZARD_FOLLOWERS:
+            if _contains_phrase(following, follower):
+                return True
+                
+        # 2. Check for explicit negation (e.g., "don't stop")
+        preceding = lower[:start][-16:]
+        if any(_contains_phrase(preceding, marker) for marker in _NEGATION_MARKERS):
+            return True
+            
+        return False
 
     def _classify_utterance(self, transcript: str, raw_meta: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         lower = transcript.lower()
@@ -58,7 +79,8 @@ class PraxisVoiceSupervisor:
         for keyword in _HALT_KEYWORDS:
             span = _find_phrase_span(lower, keyword)
             if span is not None:
-                return self._make_event(TAXONOMY_HALT, transcript, confidence)
+                if not self._halt_keyword_is_suppressed(lower, keyword, span):
+                    return self._make_event(TAXONOMY_HALT, transcript, confidence)
 
         # Priority 2: CLARIFY
         for phrase in _CLARIFY_TRIGGER_PHRASES:
@@ -89,3 +111,39 @@ class PraxisVoiceSupervisor:
             "new_prompt": new_prompt,
             "clarification_query": clarification_query,
         }
+
+    async def run(self, audio_stream_generator):
+        """ MENTOR FIX: Real Speechmatics RT WebSocket Client """
+        if websockets is None:
+            log.warning("websockets package missing, skipping live audio ingestion.")
+            return
+
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        try:
+            async with websockets.connect(SPEECHMATICS_RT_URL, extra_headers=headers) as ws:
+                start_req = {
+                    "message": "StartRecognition",
+                    "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": 16000},
+                    "transcription_config": {"language": "en", "enable_partials": False, "max_delay": 1.0}
+                }
+                await ws.send(json.dumps(start_req))
+
+                async def _sender():
+                    async for chunk in audio_stream_generator:
+                        await ws.send(chunk)
+                    await ws.send(json.dumps({"message": "EndOfStream", "last_seq_no": 0}))
+
+                async def _receiver():
+                    async for raw_message in ws:
+                        msg = json.loads(raw_message)
+                        if msg.get("message") == "AddTranscript":
+                            transcript = msg.get("metadata", {}).get("transcript", "")
+                            if transcript:
+                                event = self._classify_utterance(transcript, {"confidence": 0.99})
+                                if event:
+                                    log.info(f"VOICE INTERCEPT: {event}")
+                                    self._interrupt_callback(event)
+
+                await asyncio.gather(_sender(), _receiver())
+        except Exception as e:
+            log.error(f"Speechmatics connection failed: {e}")

@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+ROOT_DIR = str(Path(__file__).resolve().parents[1])
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import argparse
 import numpy as np
 import mujoco
@@ -5,18 +11,15 @@ from src.main import OpenVINOVLAController
 
 def randomize_scene(model: mujoco.MjModel, seed: int):
     rng = np.random.default_rng(seed)
-    # 1. Randomize Plate Position (+/- 4 cm)
     plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plate")
     if plate_id != -1:
         model.body_pos[plate_id][0] += rng.uniform(-0.04, 0.04)
         model.body_pos[plate_id][1] += rng.uniform(-0.04, 0.04)
 
-    # 2. Randomize Mug Mass (+/- 25%)
     mug_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "mug")
     if mug_id != -1:
         model.body_mass[mug_id] *= rng.uniform(0.75, 1.25)
 
-    # 3. Randomize Table Friction (+/- 20%)
     table_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table")
     if table_id != -1:
         model.geom_friction[table_id][0] *= rng.uniform(0.8, 1.2)
@@ -41,9 +44,20 @@ def evaluate_robustness(scene_path: str, model_path: str, num_seeds: int = 10):
             data.ctrl[:14] = action_chunk[step % 50]
             mujoco.mj_step(model, data)
 
-        # Evaluates stability and lack of catastrophic joint divergence
-        max_qvel = np.max(np.abs(data.qvel))
-        success = bool(max_qvel < 15.0 and not np.isnan(data.qpos).any())
+        # MENTOR FIX: True Task Success Metric
+        # Check if the plate body actually reached the target table setting coordinate
+        plate_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plate")
+        if plate_id != -1:
+            plate_pos = data.xpos[plate_id]
+            target_pos = np.array([0.0, 0.15, 0.40]) # Example desired table placement
+            distance = np.linalg.norm(plate_pos - target_pos)
+            max_qvel = np.max(np.abs(data.qvel))
+            
+            # Success: Plate is within 10cm of target AND physics remained stable
+            success = bool(distance < 0.10 and max_qvel < 15.0)
+        else:
+            success = False
+
         if success:
             successes += 1
             status = "PASSED"
