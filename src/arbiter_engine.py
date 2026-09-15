@@ -8,7 +8,7 @@ from src.audit_logger import AppendOnlyLedger, sign_event
 
 log = logging.getLogger(__name__)
 
-PRAXIS_GUARD_JOINT_COUNT = 14  # Updated to 14 to match your new bimanual 7-DOF arms
+PRAXIS_GUARD_JOINT_COUNT = 14
 
 try:
     from openvino import AsyncInferQueue, Core
@@ -47,7 +47,6 @@ class PraxisGuardArbiter:
         self.emergency_stop_flag: bool = False
         self._active_chunk: Optional[ActionChunk] = None
         self._velocity_scale: float = 1.0
-        self._last_commanded_velocity: Optional[np.ndarray] = None
         self._last_n_joints: int = 0
         self._pending_replan_prompt: Optional[str] = None
         self._active_chunk_frozen: bool = False
@@ -79,7 +78,6 @@ class PraxisGuardArbiter:
             if taxonomy == "HALT":
                 self.emergency_stop_flag = True
                 self._active_chunk = None
-                self._issue_zero_velocity_command()
             elif taxonomy == "REDIRECT":
                 self._active_chunk = None
                 self._trigger_replan(event["new_prompt"])
@@ -95,9 +93,6 @@ class PraxisGuardArbiter:
         if not known:
             log.error("Unknown taxonomy in event (audited, then raising): %r", taxonomy)
             raise ValueError(f"Unknown taxonomy in event: {taxonomy!r}")
-
-    def _issue_zero_velocity_command(self) -> None:
-        self._last_commanded_velocity = np.zeros(self._last_n_joints, dtype=np.float64)
 
     def _trigger_replan(self, new_prompt: str) -> None:
         self._pending_replan_prompt = new_prompt
@@ -151,7 +146,9 @@ class PraxisGuardArbiter:
         
         with self._state_lock:
             if self.emergency_stop_flag:
-                return np.zeros(n_joints, dtype=np.float64)
+                # Holds the current position to freeze safely instead of snapping to 0 origin
+                return state_vector.copy()
+            
             if self._active_chunk is not None and not self._active_chunk_frozen:
                 chunk_action = self._active_chunk.current()
                 if chunk_action is not None:
@@ -160,11 +157,15 @@ class PraxisGuardArbiter:
             velocity_scale = self._velocity_scale
             
         if self._infer_queue is None or self._compiled_model is None:
-            return np.zeros(n_joints, dtype=np.float64)
+            # Fallback safe hold
+            return state_vector.copy()
             
         self._infer_queue.wait_all()
         self._infer_queue.start_async({0: state_vector})
         self._infer_queue.wait_all()
+        
         if self._pending_infer_result is None:
-            return np.zeros(n_joints, dtype=np.float64)
+            # Fallback safe hold
+            return state_vector.copy()
+            
         return self._pending_infer_result * velocity_scale
